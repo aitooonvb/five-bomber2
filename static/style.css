@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; min-height: 100vh; color: #fff; text-align: center; overflow-x: hidden;
-  font-family: system-ui, "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Meiryo", sans-serif;
   background:
     radial-gradient(ellipse at 50% 118%, rgba(130, 225, 255, .8), transparent 60%),
     repeating-linear-gradient(115deg, rgba(255, 255, 255, .07) 0 36px, transparent 36px 84px),
@@ -42,13 +42,14 @@ body::before {   /* きらめき */
 .box {
   width: clamp(54px, 13vw, 130px); height: clamp(70px, 16vw, 160px); display: flex; align-items: center; justify-content: center;
   font-size: clamp(32px, 8.5vw, 88px); font-weight: 900; color: #fff; border-radius: 12px; border: 5px solid #fff;
-  font-family: "UD Digi Kyokasho N-B", "UD デジタル 教科書体 N-B", "HGP教科書体", "Klee One", "Klee", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+  font-family: inherit;
   background: linear-gradient(180deg, #3d8bff, #0c3cae); box-shadow: 0 8px 0 #06206b, 0 0 20px rgba(120, 200, 255, .7);
 }
 .box.on { color: #7a4a00; background: linear-gradient(180deg, #ffe36b, #ffb400); }
 .box.rev { color: #111; background: #fff; border-color: #ffd21f; }          /* 公開：白いカードに手書き風の文字 */
 .box.rev.ok { border-color: #2ee27a; box-shadow: 0 8px 0 #0b7a3a, 0 0 26px rgba(70, 255, 140, .85); }
 .box.rev.ng { border-color: #ff4d5e; box-shadow: 0 8px 0 #8a0f1f, 0 0 26px rgba(255, 80, 100, .85); }
+.box.rev.bad { color: #fff; border-color: #ff4d5e; background: linear-gradient(180deg, #ff6b7d, #c4001a); box-shadow: 0 8px 0 #7a0014, 0 0 26px rgba(255, 80, 100, .9); }
 .box.me { outline: 4px dashed #ffd21f; outline-offset: 4px; }
 .box.flip { animation: flip .55s backwards; }
 @keyframes flip { from { transform: rotateY(90deg) scale(.85); } to { transform: rotateY(0) scale(1); } }
@@ -76,3 +77,5 @@ input:disabled { background: #dbe6ff; }
 .dialog { width: min(92vw, 520px); padding: 26px 22px; border-radius: 16px; border: 4px solid #fff; background: linear-gradient(180deg, #1a6bff, #0a3aa8); box-shadow: 0 0 30px rgba(130, 200, 255, .7); }
 .dialog p { font-size: 22px; font-weight: 800; margin: 0 0 14px; line-height: 1.5; }
 .dialog .big { font-size: 80px; line-height: 1.1; color: #ffd21f; margin: 4px 0 10px; text-shadow: 0 3px 0 #04124f; }
+
+button, input { font-family: inherit; }   /* ボタン・入力欄も同じ丸ゴシックに */
