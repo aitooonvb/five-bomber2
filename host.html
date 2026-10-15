@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ファイブボンバー【親機】</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="page">
+  <div class="logo">💣 FIVE BOMBER</div><br>
+  <span class="tag">部屋コード <b id="roomCode">----</b></span>
+  <span class="tag" id="count"></span>
+  <span class="tag" id="remain"></span>
+  <div class="small">子機はこのURLを開いてコードを入力：<span id="joinUrl"></span>　<span id="conn"></span></div>
+
+  <div class="qbar" id="question"></div>
+  <div class="boxes" id="boxes"></div>
+  <div class="banner" id="banner"></div>
+  <div class="answerLine" id="answerLine"></div>
+  <div>
+    <button id="btnNext" disabled>出題（次の問題）</button>
+    <button id="btnJudge" class="hidden">答えあわせ</button>
+    <button id="btnRetry" class="sub" disabled>同じ問題を再挑戦</button>
+    <button id="btnReset" class="sub" disabled>問題リセット</button>
+    <button id="btnNew" class="sub">部屋コードを変える</button>
+  </div>
+  <div class="msg" id="msg"></div>
+</div>
+
+<!-- 答えあわせの確認ダイアログ -->
+<div class="modal hidden" id="judgeModal">
+  <div class="dialog">
+    <p>全員の回答が出そろいました。<br>答えあわせをしますか？</p>
+    <button id="btnYes">はい</button>
+    <button id="btnNo" class="sub">いいえ</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const CH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const rnd = n => Array.from({ length: n }, () => CH[Math.floor(Math.random() * CH.length)]).join("");
+
+let room = (new URLSearchParams(location.search).get("room") || localStorage.getItem("fl_room") || rnd(4)).toUpperCase();
+localStorage.setItem("fl_room", room);
+let key = localStorage.getItem("fl_key_" + room);
+if (!key) { key = rnd(16); localStorage.setItem("fl_key_" + room, key); }
+$("roomCode").textContent = room;
+$("joinUrl").textContent = location.origin + "/?room=" + room;
+
+const boxes = [], whos = [];
+for (let i = 0; i < 5; i++) {
+  const cell = document.createElement("div"), b = document.createElement("div"), w = document.createElement("div");
+  b.className = "box"; w.className = "who"; cell.append(b, w); $("boxes").append(cell);
+  boxes.push(b); whos.push(w);
+}
+
+// ---------- 効果音（WebAudio） ----------
+let ac = null;
+document.addEventListener("click", () => {
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === "suspended") ac.resume();
+});
+function note(type, f, t0, d, vol, lp) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.value = f; o.connect(g);
+  if (lp) { const fl = ac.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = lp; g.connect(fl); fl.connect(ac.destination); }
+  else g.connect(ac.destination);
+  const s = ac.currentTime + t0;
+  g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(vol, s + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+  o.start(s); o.stop(s + d + 0.05);
+}
+// 正解「ピンポン ピンポン」：高い音→低い音 を2回
+function pinpon() {
+  [0, 0.75].forEach(t => {
+    note("sine", 1568, t, 0.35, 0.35); note("sine", 3136, t, 0.2, 0.08);
+    note("sine", 1175, t + 0.3, 0.5, 0.35); note("sine", 2350, t + 0.3, 0.25, 0.08);
+  });
+}
+// 不正解「ブッ ブー」：短い→長い
+function buzz() {
+  [[0, 0.2], [0.32, 0.85]].forEach(([t, d]) => {
+    note("sawtooth", 150, t, d, 0.35, 900); note("square", 75, t, d, 0.15, 500);
+  });
+}
+
+// ---------- 通信 ----------
+let ws, prev = null, fatal = false, dismissed = false;
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => { $("conn").textContent = "● サーバ接続OK"; send({ type: "hello", role: "host", room, key }); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === "state") render(m);
+    else if (m.type === "error") { $("msg").textContent = m.message; if (m.fatal) fatal = true; }
+  };
+  ws.onclose = () => { $("conn").textContent = "● 切断（再接続中…）"; if (!fatal) setTimeout(connect, 2000); };
+}
+
+function render(m) {
+  $("msg").textContent = "";
+  const conn = m.connected.filter(Boolean).length, all = conn === 5;
+  $("count").textContent = `子機 ${conn}/5 台`;
+  $("remain").textContent = `出題 ${m.asked}/${m.total} 問`;
+  const changed = !prev || prev.phase !== m.phase;
+
+  for (let i = 0; i < 5; i++) {
+    const b = boxes[i];
+    if (m.phase === "revealed") {
+      if (changed) { b.className = "box flip " + (m.ok ? "ok" : "ng"); b.style.animationDelay = (i * 0.25) + "s"; }
+      b.textContent = m.chars[i];
+    } else {
+      b.style.animationDelay = "";
+      b.className = "box" + ((m.phase === "answering" || m.phase === "ready") && m.submitted[i] ? " on" : "");
+      b.textContent = (m.phase === "answering" || m.phase === "ready") && m.submitted[i] ? "●" : "";
+    }
+    whos[i].textContent = `P${i + 1} ` + (m.connected[i] ? "接続中" : "未接続");
+    whos[i].className = "who" + (m.connected[i] ? "" : " off");
+  }
+
+  $("question").textContent = m.phase === "lobby"
+    ? (all ? "全員そろいました。「出題」を押してください" : "子機の参加を待っています…")
+    : `第${m.qno}問　${m.text}`;
+
+  const bn = $("banner");
+  bn.className = "banner"; bn.textContent = ""; $("answerLine").textContent = "";
+  if (m.phase === "ready") bn.textContent = "全員の回答がそろいました！";
+  if (m.phase === "revealed") {
+    bn.classList.add(m.ok ? "ok" : "ng");
+    bn.textContent = m.ok ? "🎉 正解！" : "❌ 不正解";
+    if (!m.ok) $("answerLine").textContent = `正解は「${m.answer}」`;
+  }
+
+  // 答えあわせの確認ダイアログ
+  if (m.phase !== "ready") dismissed = false;
+  $("judgeModal").classList.toggle("hidden", !(m.phase === "ready" && !dismissed));
+  $("btnJudge").classList.toggle("hidden", m.phase !== "ready");
+
+  $("btnNext").disabled = !(all && (m.phase === "lobby" || m.phase === "revealed") && m.remaining > 0);
+  $("btnRetry").disabled = !(all && m.phase === "revealed");
+  $("btnReset").disabled = !(m.phase === "lobby" || m.phase === "revealed");
+  $("btnNext").textContent = m.remaining > 0 ? "出題（次の問題）" : "全問出題済み";
+  $("btnReset").className = m.remaining > 0 ? "sub" : "";
+
+  if (prev && prev.phase === "ready" && m.phase === "revealed") { m.ok ? pinpon() : buzz(); }
+  prev = m;
+}
+
+$("btnNext").onclick = () => send({ type: "next" });
+$("btnRetry").onclick = () => send({ type: "retry" });
+$("btnReset").onclick = () => send({ type: "reset_deck" });
+$("btnYes").onclick = $("btnJudge").onclick = () => send({ type: "judge" });
+$("btnNo").onclick = () => { dismissed = true; $("judgeModal").classList.add("hidden"); };
+$("btnNew").onclick = () => {
+  if (confirm("新しい部屋コードにします。子機は入り直しになります。よろしいですか？")) {
+    localStorage.removeItem("fl_room"); location.href = location.pathname;
+  }
+};
+connect();
+</script>
+</body>
+</html>

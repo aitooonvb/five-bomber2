@@ -1,0 +1,2 @@
+aiohttp>=3.9
+openpyxl>=3.1

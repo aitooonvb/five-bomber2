@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ファイブボンバー【子機】</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+#roomInput { width: 220px; text-transform: uppercase; letter-spacing: 4px; }
+#charInput { width: 130px; font-size: 60px; padding: 6px; }
+#slot { font-size: 20px; font-weight: 800; color: #ffe27a; margin: 8px 0; }
+</style>
+</head>
+<body>
+<div class="page" style="max-width:480px">
+  <div class="logo">💣 FIVE BOMBER</div>
+
+  <!-- 参加画面 -->
+  <div id="joinView">
+    <p>親機に表示されている<br>「部屋コード」を入力してください</p>
+    <input id="roomInput" maxlength="8" placeholder="例: AB7K" autocomplete="off">
+    <div><button id="btnJoin">参加する</button></div>
+  </div>
+
+  <!-- ゲーム画面 -->
+  <div id="gameView" class="hidden">
+    <div id="slot"></div>
+    <div class="qbar" id="question" style="font-size:20px"></div>
+    <input id="charInput" autocomplete="off" disabled>
+    <div><button id="btnSend" disabled>決定</button></div>
+    <div id="info" class="answerLine"></div>
+    <div class="banner" id="result"></div>
+  </div>
+  <div class="msg" id="error"></div>
+</div>
+
+<!-- 送信前の確認ダイアログ -->
+<div class="modal hidden" id="confirmModal">
+  <div class="dialog">
+    <div class="big" id="confirmChar"></div>
+    <p>回答を送信します。<br>変更はできませんがよろしいですか？</p>
+    <button id="btnOk">送信する</button>
+    <button id="btnBack" class="sub">もどる</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const CH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const rnd = n => Array.from({ length: n }, () => CH[Math.floor(Math.random() * CH.length)]).join("");
+
+let cid = sessionStorage.getItem("fl_cid");     // 端末(タブ)ごとのID。再接続すると同じ担当に戻る
+if (!cid) { cid = rnd(16); sessionStorage.setItem("fl_cid", cid); }
+
+const params = new URLSearchParams(location.search);
+$("roomInput").value = (params.get("room") || localStorage.getItem("fl_last_room") || localStorage.getItem("fl_room") || "").toUpperCase();
+
+let ws, room = "", fatal = false, joined = false, lastRound = -1, pending = "";
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => send({ type: "hello", role: "player", room, cid });
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === "state") render(m);
+    else if (m.type === "error") { $("error").textContent = m.message; if (m.fatal) { fatal = true; if (!joined) $("btnJoin").disabled = false; } }
+  };
+  ws.onclose = () => {
+    if (joined) $("info").textContent = "切断されました。再接続しています…";
+    if (!fatal) setTimeout(connect, 2000);
+  };
+}
+
+function render(m) {
+  if (!joined) {
+    joined = true; localStorage.setItem("fl_last_room", room);
+    $("joinView").classList.add("hidden"); $("gameView").classList.remove("hidden");
+  }
+  $("error").textContent = "";
+  const n = m.submitted.filter(Boolean).length, mineSent = m.submitted[m.you - 1];
+  const answering = m.phase === "answering";
+  $("slot").textContent = `あなたはプレイヤー${m.you}（第${m.you}文字目）担当`;
+  $("question").textContent = m.phase === "lobby" ? "出題を待っています…" : `第${m.qno}問　${m.text}`;
+
+  if (m.round !== lastRound) { lastRound = m.round; $("charInput").value = ""; }
+  if (mineSent) $("charInput").value = m.mine;            // 送信済みの文字を表示
+
+  const canType = answering && !mineSent;                  // 送信後は変更不可
+  $("charInput").disabled = !canType;
+  $("btnSend").disabled = !canType;
+  if (canType && $("confirmModal").classList.contains("hidden")) $("charInput").focus();
+
+  if (m.phase === "lobby") $("info").textContent = `参加中 ${m.connected.filter(Boolean).length}/5 人`;
+  else if (answering) $("info").textContent = mineSent
+    ? `送信しました（変更できません）　入力済み ${n}/5` : `自分の担当の1文字を入力してください　入力済み ${n}/5`;
+  else if (m.phase === "ready") $("info").textContent = "全員の回答がそろいました。親機で答えあわせ中…";
+
+  const r = $("result");
+  r.className = "banner"; r.textContent = "";
+  if (m.phase === "revealed") {
+    r.classList.add(m.ok ? "ok" : "ng");
+    r.textContent = m.ok ? "🎉 正解！" : "❌ 不正解";
+    $("info").textContent = `みんなの答え：${m.chars.join("")}`;
+  }
+}
+
+// 「決定」→ 確認ダイアログ → 「送信する」で初めて送信
+$("btnSend").onclick = () => {
+  const v = $("charInput").value.trim();
+  if (Array.from(v).length !== 1) { $("error").textContent = "1文字だけ入力してください"; return; }
+  $("error").textContent = ""; pending = v;
+  $("confirmChar").textContent = v;
+  $("confirmModal").classList.remove("hidden");
+};
+$("btnBack").onclick = () => { $("confirmModal").classList.add("hidden"); $("charInput").focus(); };
+$("btnOk").onclick = () => {
+  $("confirmModal").classList.add("hidden");
+  $("btnSend").disabled = true; $("charInput").disabled = true;   // 二重送信防止
+  send({ type: "input", char: pending });
+};
+$("charInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("btnSend").click(); });
+
+$("btnJoin").onclick = () => {
+  room = $("roomInput").value.trim().toUpperCase();
+  if (!room) { $("error").textContent = "部屋コードを入力してください"; return; }
+  $("error").textContent = ""; $("btnJoin").disabled = true; fatal = false; connect();
+};
+$("roomInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) $("btnJoin").click(); });
+if (params.get("room")) $("btnJoin").click();
+</script>
+</body>
+</html>
