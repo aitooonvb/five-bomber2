@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ファイブリーグ【親機】</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="page">
-  <div class="logo"><b>5</b>ファイブリーグ</div><br>
+  <div class="logo">ファイブリーグ</div><br>
   <span class="tag">部屋コード <b id="roomCode">----</b></span>
   <span class="tag" id="count"></span>
   <span class="tag" id="remain"></span>
@@ -114,7 +117,7 @@ function render(m) {
   for (let i = 0; i < 5; i++) {
     const b = boxes[i];
     if (m.phase === "revealed") {
-      if (changed) { b.className = "box rev flip " + (m.ok ? "ok" : "ng"); b.style.animationDelay = (i * STEP) + "s"; }
+      if (changed) { b.className = "box rev flip " + (m.wrong[i] ? "bad" : "ok"); b.style.animationDelay = (i * STEP) + "s"; }
       b.textContent = m.chars[i];
     } else {
       b.style.animationDelay = "";
