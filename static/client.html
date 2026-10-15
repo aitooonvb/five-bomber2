@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ファイブリーグ【子機】</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 <style>
 #roomInput { width: 220px; text-transform: uppercase; letter-spacing: 4px; }
@@ -15,7 +18,7 @@
 </head>
 <body>
 <div class="page" style="max-width:480px">
-  <div class="logo"><b>5</b>ファイブリーグ</div>
+  <div class="logo">ファイブリーグ</div>
 
   <!-- 参加画面 -->
   <div id="joinView">
@@ -95,7 +98,7 @@ function render(m) {
   for (let i = 0; i < 5; i++) {
     const b = boxes[i], me = (i === m.you - 1) ? " me" : "";
     if (m.phase === "revealed") {
-      if (changed) { b.className = "box rev flip " + (m.ok ? "ok" : "ng") + me; b.style.animationDelay = (i * STEP) + "s"; }
+      if (changed) { b.className = "box rev flip " + (m.wrong[i] ? "bad" : "ok") + me; b.style.animationDelay = (i * STEP) + "s"; }
       b.textContent = m.chars[i];
     } else {
       b.style.animationDelay = "";
