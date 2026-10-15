@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ファイブボンバー【子機】</title>
+<title>ファイブリーグ【子機】</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 #roomInput { width: 220px; text-transform: uppercase; letter-spacing: 4px; }
 #charInput { width: 130px; font-size: 60px; padding: 6px; }
-#slot { font-size: 20px; font-weight: 800; color: #ffe27a; margin: 8px 0; }
+#slot { font-size: 20px; font-weight: 800; color: #ffd21f; margin: 8px 0; }
+.boxes .box { width: clamp(46px, 15vw, 78px); height: clamp(58px, 19vw, 100px); font-size: clamp(26px, 9vw, 50px); border-width: 4px; }
+#boxes { margin: 12px 0 18px; }
 </style>
 </head>
 <body>
 <div class="page" style="max-width:480px">
-  <div class="logo">💣 FIVE BOMBER</div>
+  <div class="logo"><b>5</b>ファイブリーグ</div>
 
   <!-- 参加画面 -->
   <div id="joinView">
@@ -25,7 +27,8 @@
   <!-- ゲーム画面 -->
   <div id="gameView" class="hidden">
     <div id="slot"></div>
-    <div class="qbar" id="question" style="font-size:20px"></div>
+    <div class="qbar" style="font-size:20px"><span class="qno" id="qno"></span><span class="qtext" id="qtext"></span></div>
+    <div class="boxes" id="boxes"></div>
     <input id="charInput" autocomplete="off" disabled>
     <div><button id="btnSend" disabled>決定</button></div>
     <div id="info" class="answerLine"></div>
@@ -55,7 +58,10 @@ if (!cid) { cid = rnd(16); sessionStorage.setItem("fl_cid", cid); }
 const params = new URLSearchParams(location.search);
 $("roomInput").value = (params.get("room") || localStorage.getItem("fl_last_room") || localStorage.getItem("fl_room") || "").toUpperCase();
 
-let ws, room = "", fatal = false, joined = false, lastRound = -1, pending = "";
+let ws, room = "", fatal = false, joined = false, lastRound = -1, pending = "", prevPhase = null;
+const STEP = 0.6;
+const boxes = [];
+for (let i = 0; i < 5; i++) { const b = document.createElement("div"); b.className = "box"; $("boxes").append(b); boxes.push(b); }
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 
 function connect() {
@@ -81,7 +87,23 @@ function render(m) {
   const n = m.submitted.filter(Boolean).length, mineSent = m.submitted[m.you - 1];
   const answering = m.phase === "answering";
   $("slot").textContent = `あなたはプレイヤー${m.you}（第${m.you}文字目）担当`;
-  $("question").textContent = m.phase === "lobby" ? "出題を待っています…" : `第${m.qno}問　${m.text}`;
+  $("qno").textContent = m.phase === "lobby" ? "" : `第${m.qno}問`;
+  $("qtext").textContent = m.phase === "lobby" ? "出題を待っています…" : m.text;
+
+  // 5人分の解答パネル（公開されたら全員の文字が見える。点線の枠が自分の担当）
+  const changed = prevPhase !== m.phase;
+  for (let i = 0; i < 5; i++) {
+    const b = boxes[i], me = (i === m.you - 1) ? " me" : "";
+    if (m.phase === "revealed") {
+      if (changed) { b.className = "box rev flip " + (m.ok ? "ok" : "ng") + me; b.style.animationDelay = (i * STEP) + "s"; }
+      b.textContent = m.chars[i];
+    } else {
+      b.style.animationDelay = "";
+      const sent = (m.phase === "answering" || m.phase === "ready") && m.submitted[i];
+      b.className = "box" + (sent ? " on" : "") + me;
+      b.textContent = sent ? "●" : "";
+    }
+  }
 
   if (m.round !== lastRound) { lastRound = m.round; $("charInput").value = ""; }
   if (mineSent) $("charInput").value = m.mine;            // 送信済みの文字を表示
@@ -100,9 +122,11 @@ function render(m) {
   r.className = "banner"; r.textContent = "";
   if (m.phase === "revealed") {
     r.classList.add(m.ok ? "ok" : "ng");
-    r.textContent = m.ok ? "🎉 正解！" : "❌ 不正解";
-    $("info").textContent = `みんなの答え：${m.chars.join("")}`;
+    r.textContent = m.ok ? "◯ 正解！" : "✕ 不正解";
+    r.style.setProperty("--d", (changed ? 5 * STEP + 0.2 : 0) + "s");
+    $("info").textContent = `みんなの答え：${m.chars.join("")}　（点線の枠があなた）`;
   }
+  prevPhase = m.phase;
 }
 
 // 「決定」→ 確認ダイアログ → 「送信する」で初めて送信
