@@ -127,7 +127,10 @@ function render(m) {
     r.classList.add(m.ok ? "ok" : "ng");
     r.textContent = m.ok ? "◯ 正解！" : "✕ 不正解";
     r.style.setProperty("--d", (changed ? 5 * STEP + 0.2 : 0) + "s");
-    $("info").textContent = `みんなの答え：${m.chars.join("")}　（点線の枠があなた）`;
+    // 正しい解答：カードが全部めくれてから表示（先に見えてしまわないように）
+    $("info").textContent = "";
+    const showAnswer = () => { if (prevPhase === "revealed" && lastRound === m.round) $("info").textContent = `正解：${m.answer}`; };
+    changed ? setTimeout(showAnswer, (5 * STEP + 0.2) * 1000) : showAnswer();
   }
   prevPhase = m.phase;
 }
