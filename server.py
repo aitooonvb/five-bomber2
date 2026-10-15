@@ -83,6 +83,7 @@ class Room:
         self.phase = "lobby"          # lobby / answering / ready / revealed
         self.inputs = [None] * N
         self.ok = None
+        self.wrong = [False] * N      # 公開時：間違っている文字の位置
         self.touched = time.time()
         self.reset_deck()
 
@@ -104,6 +105,7 @@ class Room:
             # 正解・各自の文字は公開するまで送らない
             "chars": list(self.inputs) if revealed else None,
             "ok": self.ok if revealed else None,
+            "wrong": list(self.wrong) if revealed else None,
             "answer": self.questions[self.qi][1] if revealed else None,
         }
 
@@ -231,8 +233,9 @@ async def ws_handler(request):
                     await broadcast(room)
 
                 elif t == "judge" and room.phase == "ready":   # 「答えあわせをしますか？」→ はい
-                    guess = "".join(room.inputs)
-                    room.ok = normalize(guess) == normalize(room.questions[room.qi][1])
+                    answer = room.questions[room.qi][1]
+                    room.wrong = [normalize(c) != normalize(a) for c, a in zip(room.inputs, answer)]
+                    room.ok = not any(room.wrong)
                     room.phase = "revealed"
                     await broadcast(room)
 
