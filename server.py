@@ -270,9 +270,17 @@ async def ws_handler(request):
     return ws
 
 
+def find(name):
+    """static/ フォルダを探し、無ければ server.py と同じ階層も探す（アップロード時の置き間違い対策）"""
+    for d in (STATIC, BASE):
+        if (d / name).is_file():
+            return d / name
+    raise web.HTTPNotFound(text=f"{name} が見つかりません。static フォルダに置いてください")
+
+
 def page(name):
     async def handler(request):
-        return web.FileResponse(STATIC / name)
+        return web.FileResponse(find(name))
     return handler
 
 
@@ -300,7 +308,7 @@ def make_app():
     app.router.add_get("/host", page("host.html"))
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/health", health)
-    app.router.add_static("/static", STATIC)
+    app.router.add_get("/static/style.css", page("style.css"))
     app.cleanup_ctx.append(cleanup_ctx)
     return app
 
@@ -311,5 +319,8 @@ if __name__ == "__main__":
         print(f"問題を {len(load_questions())} 問読み込みました（{QUESTIONS_FILE.name}）")
     except ValueError as e:
         print(f"[エラー] {e}")
+    missing = [n for n in ("host.html", "client.html", "style.css") if not any((d / n).is_file() for d in (STATIC, BASE))]
+    if missing:
+        print(f"[警告] 次のファイルが見つかりません（static フォルダに置いてください）: {missing}")
     print(f"起動しました:  親機 http://localhost:{port}/host   子機 http://localhost:{port}/")
     web.run_app(make_app(), host="0.0.0.0", port=port)
