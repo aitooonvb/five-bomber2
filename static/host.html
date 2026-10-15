@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ファイブボンバー【親機】</title>
+<title>ファイブリーグ【親機】</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="page">
-  <div class="logo">💣 FIVE BOMBER</div><br>
+  <div class="logo"><b>5</b>ファイブリーグ</div><br>
   <span class="tag">部屋コード <b id="roomCode">----</b></span>
   <span class="tag" id="count"></span>
   <span class="tag" id="remain"></span>
   <div class="small">子機はこのURLを開いてコードを入力：<span id="joinUrl"></span>　<span id="conn"></span></div>
 
-  <div class="qbar" id="question"></div>
+  <div class="qbar"><span class="qno" id="qno"></span><span class="qtext" id="qtext"></span></div>
   <div class="boxes" id="boxes"></div>
   <div class="banner" id="banner"></div>
   <div class="answerLine" id="answerLine"></div>
@@ -57,7 +57,10 @@ for (let i = 0; i < 5; i++) {
 }
 
 // ---------- 効果音（WebAudio） ----------
-let ac = null;
+let ac = null, off = 0;
+const STEP = 0.6;   // 1枚めくるごとの間隔（秒）
+const at = (o, fn) => { off = o; fn(); off = 0; };
+const drum = () => { note("sine", 110, 0, 0.3, 0.55); note("triangle", 220, 0, 0.12, 0.2); };
 document.addEventListener("click", () => {
   if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
   if (ac.state === "suspended") ac.resume();
@@ -68,7 +71,7 @@ function note(type, f, t0, d, vol, lp) {
   o.type = type; o.frequency.value = f; o.connect(g);
   if (lp) { const fl = ac.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = lp; g.connect(fl); fl.connect(ac.destination); }
   else g.connect(ac.destination);
-  const s = ac.currentTime + t0;
+  const s = ac.currentTime + off + t0;
   g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(vol, s + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, s + d);
   o.start(s); o.stop(s + d + 0.05);
@@ -111,7 +114,7 @@ function render(m) {
   for (let i = 0; i < 5; i++) {
     const b = boxes[i];
     if (m.phase === "revealed") {
-      if (changed) { b.className = "box flip " + (m.ok ? "ok" : "ng"); b.style.animationDelay = (i * 0.25) + "s"; }
+      if (changed) { b.className = "box rev flip " + (m.ok ? "ok" : "ng"); b.style.animationDelay = (i * STEP) + "s"; }
       b.textContent = m.chars[i];
     } else {
       b.style.animationDelay = "";
@@ -122,17 +125,22 @@ function render(m) {
     whos[i].className = "who" + (m.connected[i] ? "" : " off");
   }
 
-  $("question").textContent = m.phase === "lobby"
-    ? (all ? "全員そろいました。「出題」を押してください" : "子機の参加を待っています…")
-    : `第${m.qno}問　${m.text}`;
+  $("qno").textContent = m.phase === "lobby" ? "" : `第${m.qno}問`;
+  $("qtext").textContent = m.phase === "lobby"
+    ? (all ? "全員そろいました。「出題」を押してください" : "子機の参加を待っています…") : m.text;
 
   const bn = $("banner");
   bn.className = "banner"; bn.textContent = ""; $("answerLine").textContent = "";
   if (m.phase === "ready") bn.textContent = "全員の回答がそろいました！";
   if (m.phase === "revealed") {
     bn.classList.add(m.ok ? "ok" : "ng");
-    bn.textContent = m.ok ? "🎉 正解！" : "❌ 不正解";
-    if (!m.ok) $("answerLine").textContent = `正解は「${m.answer}」`;
+    bn.textContent = m.ok ? "◯ 正解！" : "✕ 不正解";
+    const wait = (5 * STEP + 0.2);
+    bn.style.setProperty("--d", (changed ? wait : 0) + "s");
+    if (!m.ok) {
+      const line = () => { if (prev && prev.phase === "revealed") $("answerLine").textContent = `正解は「${m.answer}」`; };
+      changed ? setTimeout(line, wait * 1000) : line();
+    }
   }
 
   // 答えあわせの確認ダイアログ
@@ -146,7 +154,10 @@ function render(m) {
   $("btnNext").textContent = m.remaining > 0 ? "出題（次の問題）" : "全問出題済み";
   $("btnReset").className = m.remaining > 0 ? "sub" : "";
 
-  if (prev && prev.phase === "ready" && m.phase === "revealed") { m.ok ? pinpon() : buzz(); }
+  if (prev && prev.phase === "ready" && m.phase === "revealed") {      // 1枚ずつ「ドン」→ 最後に正解/不正解の音
+    for (let i = 0; i < 5; i++) at(i * STEP, drum);
+    at(5 * STEP + 0.2, m.ok ? pinpon : buzz);
+  }
   prev = m;
 }
 
